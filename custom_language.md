@@ -75,6 +75,19 @@ def _map_custom_language(self, language):
     return language_lower
 ```
 
+#### 語言分佈預覽功能
+
+```python
+def _preview_language_distribution(self):
+    """
+    預覽資料集中的語言分佈情況
+    統計每種語言的樣本數量和總時長
+    """
+    # 統計語言分佈並以表格形式顯示
+    # 包含樣本數、時長、百分比等資訊
+    # 為客家話腔調添加特殊標記 🗣️
+```
+
 #### 初始化時調用
 
 在 `CustomDataset.__init__()` 中添加：
@@ -82,6 +95,8 @@ def _map_custom_language(self, language):
 ```python
 # 加载数据列表
 self._load_data_list()
+# 預覽語言分佈
+self._preview_language_distribution()
 # 設置自定義語言 token
 self._setup_custom_language_tokens()
 ```

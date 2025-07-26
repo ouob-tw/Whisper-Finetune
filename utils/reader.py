@@ -69,6 +69,8 @@ class CustomDataset(Dataset):
         self.data_list: List[dict] = []
         # 加载数据列表
         self._load_data_list()
+        # 預覽語言分佈
+        self._preview_language_distribution()
         # 設置自定義語言 token
         self._setup_custom_language_tokens()
         # 数据增强配置参数
@@ -163,6 +165,70 @@ class CustomDataset(Dataset):
             labels.extend([end])
         data['labels'] = labels + [self.endoftext]
         return data
+
+    def _preview_language_distribution(self):
+        """
+        預覽資料集中的語言分佈情況
+        統計每種語言的樣本數量和總時長
+        """
+        language_stats = {}
+        total_samples = 0
+        total_duration = 0.0
+        
+        print("\n" + "="*60)
+        print("📊 資料集語言分佈預覽")
+        print("="*60)
+        
+        for data in self.data_list:
+            # 獲取語言標籤（如果沒有則使用全域設定）
+            language = data.get('language', self.language)
+            if language is None:
+                language = 'Unknown'
+            
+            # 標準化語言名稱（轉小寫）
+            language = language.lower()
+            
+            # 統計
+            if language not in language_stats:
+                language_stats[language] = {
+                    'count': 0,
+                    'duration': 0.0
+                }
+            
+            language_stats[language]['count'] += 1
+            language_stats[language]['duration'] += data.get('duration', 0.0)
+            
+            total_samples += 1
+            total_duration += data.get('duration', 0.0)
+        
+        # 顯示統計結果
+        print(f"📋 總樣本數：{total_samples:,}")
+        print(f"⏱️  總時長：{total_duration:.2f} 小時 ({total_duration*60:.1f} 分鐘)")
+        print(f"🌍 語言種類：{len(language_stats)} 種")
+        print("\n📈 各語言詳細統計：")
+        print("-" * 60)
+        print(f"{'語言':<20} {'樣本數':<10} {'時長(小時)':<12} {'百分比':<8}")
+        print("-" * 60)
+        
+        # 按樣本數排序顯示
+        sorted_languages = sorted(language_stats.items(), 
+                                key=lambda x: x[1]['count'], 
+                                reverse=True)
+        
+        for language, stats in sorted_languages:
+            count = stats['count']
+            duration = stats['duration']
+            percentage = (count / total_samples) * 100
+            
+            # 為客家話腔調添加特殊標記
+            display_name = language
+            if language.startswith('hakka_'):
+                display_name = f"🗣️  {language}"
+            
+            print(f"{display_name:<20} {count:<10,} {duration:<12.2f} {percentage:<8.1f}%")
+        
+        print("-" * 60)
+        print()
 
     def _setup_custom_language_tokens(self):
         """
