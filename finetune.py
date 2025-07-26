@@ -91,6 +91,21 @@ def main():
                                                             local_files_only=args.local_files_only)
     model.config.forced_decoder_ids = None
     model.config.suppress_tokens = []
+    
+    # 調整模型以適應擴展的詞彙表（如果有添加自定義語言 token）
+    original_vocab_size = len(processor.tokenizer.get_vocab())
+    if len(processor.tokenizer.get_vocab()) > model.config.vocab_size:
+        print(f"📈 詞彙表已擴展：{model.config.vocab_size} -> {len(processor.tokenizer.get_vocab())}")
+        print("🔧 調整模型 embedding 層大小...")
+        
+        # 調整模型的 embedding 層
+        model.resize_token_embeddings(len(processor.tokenizer.get_vocab()))
+        
+        # 更新模型配置
+        model.config.vocab_size = len(processor.tokenizer.get_vocab())
+        
+        print(f"✅ 模型 embedding 層已調整為 {model.config.vocab_size} tokens")
+    
     # 量化模型
     model = prepare_model_for_kbit_training(model)
     # 注册forward，否则多卡训练会失败

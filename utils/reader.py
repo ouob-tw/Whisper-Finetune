@@ -232,29 +232,98 @@ class CustomDataset(Dataset):
 
     def _setup_custom_language_tokens(self):
         """
-        為客家話腔調添加自定義語言 token 到 tokenizer
-        這是初始化時調用的方法
+        真正添加客家話語言 token 到 Whisper tokenizer 的詞彙表
+        擴展語言支援而不是繞過驗證
         """
-        hakka_languages = [
-            'Hakka_Sixian', 'Hakka_Hailu', 'Hakka_Dapu', 
-            'Hakka_Raoping', 'Hakka_Zhaoan', 'Hakka_NanSixian'
-        ]
+        hakka_languages = {
+            'hakka_sixian': '<|hakka_sixian|>',
+            'hakka_hailu': '<|hakka_hailu|>',
+            'hakka_dapu': '<|hakka_dapu|>',
+            'hakka_raoping': '<|hakka_raoping|>',
+            'hakka_zhaoan': '<|hakka_zhaoan|>',
+            'hakka_nansixian': '<|hakka_nansixian|>'
+        }
         
-        # 檢查是否需要添加新的語言 token
-        existing_tokens = self.processor.tokenizer.get_vocab()
+        print(f"🔧 開始擴展 Whisper tokenizer 詞彙表")
+        print(f"📋 要添加的客家話腔調：{list(hakka_languages.keys())}")
+        
+        tokenizer = self.processor.tokenizer
+        
+        # 1. 添加新的語言 token 到詞彙表
         new_tokens = []
+        vocab = tokenizer.get_vocab()
         
-        for lang in hakka_languages:
-            token = f"<|{lang.lower()}|>"
-            if token not in existing_tokens:
+        for lang_code, token in hakka_languages.items():
+            if token not in vocab:
                 new_tokens.append(token)
+                print(f"   ➕ 添加語言 token：{token}")
         
         if new_tokens:
-            # 添加新的特殊 token
-            self.processor.tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
-            print(f"Added custom language tokens: {new_tokens}")
+            # 添加特殊 token
+            tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
+            print(f"✅ 成功添加 {len(new_tokens)} 個語言 token")
+            
+            # 重新獲取更新後的詞彙表
+            updated_vocab = tokenizer.get_vocab()
+            
+            # 2. 修補語言驗證邏輯，讓新語言被接受
+            if hasattr(tokenizer, '_get_language_id'):
+                original_get_language_id = tokenizer._get_language_id
+                
+                def patched_get_language_id(language):
+                    if language and language.lower() in hakka_languages:
+                        # 返回對應的 token ID
+                        token = hakka_languages[language.lower()]
+                        token_id = updated_vocab.get(token)
+                        print(f"🗣️ 客家話腔調 {language} -> token_id: {token_id}")
+                        return token_id
+                    else:
+                        return original_get_language_id(language)
+                
+                tokenizer._get_language_id = patched_get_language_id
+            
+            # 3. 修補 prefix_tokens 屬性來處理新語言
+            original_prefix_tokens_property = tokenizer.__class__.prefix_tokens
+            
+            def patched_prefix_tokens(self):
+                # 檢查是否有客家話語言設定
+                if hasattr(self, 'language') and self.language and self.language.lower() in hakka_languages:
+                    lang_code = self.language.lower()
+                    token = hakka_languages[lang_code]
+                    token_id = updated_vocab.get(token)
+                    
+                    if token_id is not None:
+                        # 只在第一次或每1000次時顯示，避免刷頻
+                        if not hasattr(self, '_hakka_token_logged') or not hasattr(self, '_hakka_log_count'):
+                            self._hakka_token_logged = set()
+                            self._hakka_log_count = 0
+                        
+                        if token not in self._hakka_token_logged or self._hakka_log_count % 1000 == 0:
+                            print(f"🎯 使用客家話 token：{token} (ID: {token_id})")
+                            self._hakka_token_logged.add(token)
+                        
+                        self._hakka_log_count += 1
+                        # 構建包含客家話語言 token 的前綴
+                        prefix_tokens = [
+                            updated_vocab['<|startoftranscript|>'],
+                            token_id,  # 客家話語言 token
+                            updated_vocab['<|transcribe|>'] if hasattr(self, 'task') and self.task == 'transcribe' else updated_vocab.get('<|translate|>', updated_vocab['<|transcribe|>'])
+                        ]
+                        return prefix_tokens
+                
+                # 其他情況使用原始邏輯
+                return original_prefix_tokens_property.fget(self)
+            
+            # 應用修補
+            tokenizer.__class__.prefix_tokens = property(patched_prefix_tokens)
+            
+            print("🎉 客家話語言 token 已成功整合到 Whisper tokenizer")
+            print("✨ 現在每個客家話腔調都有獨立的語言識別 token")
+            
+        else:
+            print("ℹ️  所有客家話語言 token 已存在，無需添加")
         
-        return new_tokens
+        return list(hakka_languages.keys())
 
     def _map_custom_language(self, language):
         """
