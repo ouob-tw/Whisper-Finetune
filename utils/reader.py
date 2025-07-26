@@ -69,6 +69,8 @@ class CustomDataset(Dataset):
         self.data_list: List[dict] = []
         # 加载数据列表
         self._load_data_list()
+        # 設置自定義語言 token
+        self._setup_custom_language_tokens()
         # 数据增强配置参数
         self.augment_configs = None
         self.noises_path = None
@@ -162,12 +164,63 @@ class CustomDataset(Dataset):
         data['labels'] = labels + [self.endoftext]
         return data
 
+    def _setup_custom_language_tokens(self):
+        """
+        為客家話腔調添加自定義語言 token 到 tokenizer
+        這是初始化時調用的方法
+        """
+        hakka_languages = [
+            'Hakka_Sixian', 'Hakka_Hailu', 'Hakka_Dapu', 
+            'Hakka_Raoping', 'Hakka_Zhaoan', 'Hakka_NanSixian'
+        ]
+        
+        # 檢查是否需要添加新的語言 token
+        existing_tokens = self.processor.tokenizer.get_vocab()
+        new_tokens = []
+        
+        for lang in hakka_languages:
+            token = f"<|{lang.lower()}|>"
+            if token not in existing_tokens:
+                new_tokens.append(token)
+        
+        if new_tokens:
+            # 添加新的特殊 token
+            self.processor.tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
+            print(f"Added custom language tokens: {new_tokens}")
+        
+        return new_tokens
+
+    def _map_custom_language(self, language):
+        """
+        統一轉換語言標籤為小寫，讓模型學習區分不同的客家話腔調
+        """
+        if language is None:
+            return None
+        
+        # 客家話變體列表
+        hakka_variants = [
+            'hakka_sixian', 'hakka_hailu', 'hakka_dapu', 
+            'hakka_raoping', 'hakka_zhaoan', 'hakka_nansixian'
+        ]
+        
+        # 統一轉小寫
+        language_lower = language.lower()
+        
+        if language_lower in hakka_variants:
+            # 返回小寫的客家話標籤
+            return language_lower
+        
+        # 如果是 Whisper 支援的語言，也轉小寫
+        return language_lower
+
     def __getitem__(self, idx):
         try:
             # 从数据列表里面获取音频数据、采样率和文本
             sample, sample_rate, transcript, language = self._get_list_data(idx=idx)
             # 可以为单独数据设置语言
-            self.processor.tokenizer.set_prefix_tokens(language=language if language is not None else self.language)
+            # 映射自定義語言到支援的語言
+            mapped_language = self._map_custom_language(language if language is not None else self.language)
+            self.processor.tokenizer.set_prefix_tokens(language=mapped_language)
             if len(transcript) > 0:
                 # 加载带有时间戳的文本
                 if self.timestamps:
