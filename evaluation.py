@@ -77,13 +77,18 @@ def main():
     for step, batch in enumerate(tqdm(eval_dataloader)):
         with torch.autocast(device_type="cuda"):
             with torch.no_grad():
-                generated_tokens = (
-                    model.generate(
-                        input_features=batch["input_features"].cuda(),
-                        decoder_input_ids=batch["labels"][:, :4].cuda(),
-                        max_new_tokens=255).cpu().numpy())
-                labels = batch["labels"].cpu().numpy()
-                labels = np.where(labels != -100, labels, processor.tokenizer.pad_token_id)
+                # 保持在 GPU 上進行運算
+                generated_tokens = model.generate(
+                    input_features=batch["input_features"].cuda(),
+                    decoder_input_ids=batch["labels"][:, :4].cuda(),
+                    max_new_tokens=255)
+                labels = batch["labels"]
+                # 在 GPU 上處理 labels
+                labels = torch.where(labels != -100, labels, processor.tokenizer.pad_token_id)
+                
+                # 只在需要 decode 時才移到 CPU
+                generated_tokens = generated_tokens.cpu().numpy()
+                labels = labels.cpu().numpy()
                 # 将预测和实际的token转换为文本
                 decoded_preds = processor.tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
                 decoded_labels = processor.tokenizer.batch_decode(labels, skip_special_tokens=True)
