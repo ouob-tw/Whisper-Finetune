@@ -42,7 +42,7 @@ add_arg("per_device_eval_batch_size",  type=int, default=8,    help="评估的ba
 add_arg("gradient_accumulation_steps", type=int, default=1,    help="梯度累积步数")
 add_arg("push_to_hub",                 type=bool, default=False, help="是否将模型权重推到HuggingFace Hub")
 add_arg("hub_model_id",                type=str,  default=None,  help="HuggingFace Hub上的模型仓库ID")
-add_arg("save_total_limit",            type=int,  default=10,  help="只保存最新检查点的数量")
+add_arg("save_total_limit",            type=int,  default=100,  help="只保存最新检查点的数量")
 args = parser.parse_args()
 print_arguments(args)
 
