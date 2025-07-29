@@ -353,3 +353,144 @@ Whisper 使用特殊的語言 token（如 `<|en|>`、`<|zh|>` 等）來標識不
 - **可複製的方法論**：適用於其他自定義語言
 
 這為低資源語言的語音識別研究開闢了新的技術路徑！
+
+---
+
+# 客家話語言 Token 使用範例
+
+## 1. Token 在序列中的位置
+
+### 原始 Whisper 序列格式：
+```
+[<|startoftranscript|>] [<|zh|>] [<|transcribe|>] [文本內容] [<|endoftext|>]
+```
+
+### 客家話序列格式：
+```
+[<|startoftranscript|>] [<|hakka_sixian|>] [<|transcribe|>] [文本內容] [<|endoftext|>]
+```
+
+## 2. 具體範例
+
+### 範例 1：四縣腔
+**音頻內容**：客家話四縣腔語音
+**輸入序列**：
+```
+<|startoftranscript|><|hakka_sixian|><|transcribe|>你好，今日天氣真好。<|endoftext|>
+```
+
+### 範例 2：海陸腔  
+**音頻內容**：客家話海陸腔語音
+**輸入序列**：
+```
+<|startoftranscript|><|hakka_hailu|><|transcribe|>該位係客家人無？<|endoftext|>
+```
+
+### 範例 3：大埔腔
+**音頻內容**：客家話大埔腔語音
+**輸入序列**：
+```
+<|startoftranscript|><|hakka_dapu|><|transcribe|>食飽未？<|endoftext|>
+```
+
+## 3. Token ID 對應表
+
+根據 tokenizer 擴展結果：
+
+| 腔調 | Token | Token ID |
+|------|--------|----------|
+| 四縣腔 | `<|hakka_sixian|>` | 51866 |
+| 海陸腔 | `<|hakka_hailu|>` | 51867 |
+| 大埔腔 | `<|hakka_dapu|>` | 51868 |
+| 饒平腔 | `<|hakka_raoping|>` | 51869 |
+| 詔安腔 | `<|hakka_zhaoan|>` | 51870 |
+| 南四縣 | `<|hakka_nansixian|>` | 51871 |
+
+## 4. 在代碼中的實際運作
+
+### 4.1 數據載入時 (`utils/reader.py`)
+```python
+def __getitem__(self, idx):
+    # 獲取音頻和文本
+    sample, sample_rate, transcript, language = self._get_list_data(idx=idx)
+    
+    # language = "hakka_sixian" (從數據中獲取)
+    mapped_language = self._map_custom_language(language)
+    
+    # 設置前綴 tokens，包含客家話語言標識
+    self.processor.tokenizer.set_prefix_tokens(language=mapped_language)
+    
+    # 處理音頻和文本，自動添加語言 token
+    data = self.processor(audio=sample, sampling_rate=self.sample_rate, text=transcript)
+    
+    return data
+```
+
+### 4.2 實際的 Token 序列生成
+```python
+# 當 language="hakka_sixian" 時，prefix_tokens 會是：
+prefix_tokens = [
+    50258,  # <|startoftranscript|>
+    51866,  # <|hakka_sixian|>  ← 這就是客家話 token！
+    50359   # <|transcribe|>
+]
+
+# 完整序列會是：
+# [50258, 51866, 50359, ...文本tokens..., 50257]
+# 對應：[<|startoftranscript|>, <|hakka_sixian|>, <|transcribe|>, ...文本..., <|endoftext|>]
+```
+
+### 4.3 訓練時的實際使用
+```python
+# 在訓練過程中，模型會學習：
+# 輸入音頻特徵 → 輸出序列 [50258, 51866, 50359, ...文本tokens..., 50257]
+# 
+# 其中 51866 (hakka_sixian token) 告訴模型：
+# "這是客家話四縣腔，請用四縣腔的語音模式來轉錄"
+```
+
+## 5. 為什麼需要這些 Token？
+
+### 5.1 語言識別
+- 原始 Whisper：`<|zh|>` 只能識別"中文"
+- 擴展後：`<|hakka_sixian|>` 能識別"客家話四縣腔"
+
+### 5.2 聲調和發音差異
+不同客家話腔調有不同的：
+- 聲調系統（四縣 6 調 vs 海陸 7 調）
+- 韻母差異（如：四縣「麼个」vs 海陸「麼个」）
+- 音變規律
+
+### 5.3 實際效果
+```
+音頻：[客家話四縣腔："你係哪位？"]
+
+沒有語言 token：
+輸出可能是：你是誰？(普通話轉錄)
+
+有 hakka_sixian token：
+輸出：你係哪位？(正確的四縣腔轉錄)
+```
+
+## 6. 檢驗方法
+
+### 6.1 查看 Token 是否正確添加
+```python
+# 在訓練或推理時，可以看到這樣的輸出：
+🎯 使用客家話 token：<|hakka_sixian|> (ID: 51866)
+```
+
+### 6.2 檢查模型輸入
+```python
+print("生成的前綴序列：", tokenizer.prefix_tokens)
+# 輸出：[50258, 51866, 50359]
+```
+
+### 6.3 驗證詞彙表擴展
+```python
+print(f"原始詞彙表大小：51866")
+print(f"擴展後大小：{len(tokenizer.get_vocab())}")
+# 輸出：擴展後大小：51872
+```
+
+這樣就能確保模型知道它正在處理客家話四縣腔，而不是普通話或其他語言。
