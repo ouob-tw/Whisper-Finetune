@@ -22,12 +22,52 @@ peft_config = PeftConfig.from_pretrained(args.lora_model)
 # 获取Whisper的基本模型
 base_model = WhisperForConditionalGeneration.from_pretrained(peft_config.base_model_name_or_path, device_map={"": "cpu"},
                                                              local_files_only=args.local_files_only)
+
+# 载入基础模型的 tokenizer
+tokenizer = WhisperTokenizerFast.from_pretrained(peft_config.base_model_name_or_path,
+                                                 local_files_only=args.local_files_only)
+
+# 添加微调时使用的客家话语言 tokens（与 utils/reader.py 中的设置一致）
+hakka_languages = {
+    'hakka_sixian': '<|hakka_sixian|>',
+    'hakka_hailu': '<|hakka_hailu|>',
+    'hakka_dapu': '<|hakka_dapu|>',
+    'hakka_raoping': '<|hakka_raoping|>',
+    'hakka_zhaoan': '<|hakka_zhaoan|>',
+    'hakka_nansixian': '<|hakka_nansixian|>'
+}
+
+print(f"🔧 重新创建微调时的 tokenizer 设置")
+new_tokens = []
+vocab = tokenizer.get_vocab()
+
+for lang_code, token in hakka_languages.items():
+    if token not in vocab:
+        new_tokens.append(token)
+        print(f"   ➕ 添加语言 token：{token}")
+
+if new_tokens:
+    # 添加特殊 token
+    tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
+    print(f"✅ 成功添加 {len(new_tokens)} 个语言 token")
+
+# 调整模型以适应扩展的词汇表
+if len(tokenizer.get_vocab()) > base_model.config.vocab_size:
+    print(f"📈 词汇表已扩展：{base_model.config.vocab_size} -> {len(tokenizer.get_vocab())}")
+    print("🔧 调整模型 embedding 层大小...")
+    
+    # 调整模型的 embedding 层
+    base_model.resize_token_embeddings(len(tokenizer.get_vocab()))
+    
+    # 更新模型配置
+    base_model.config.vocab_size = len(tokenizer.get_vocab())
+    
+    print(f"✅ 模型 embedding 层已调整为 {base_model.config.vocab_size} tokens")
+
 # 与Lora模型合并
 model = PeftModel.from_pretrained(base_model, args.lora_model, local_files_only=args.local_files_only)
 feature_extractor = WhisperFeatureExtractor.from_pretrained(peft_config.base_model_name_or_path,
                                                             local_files_only=args.local_files_only)
-tokenizer = WhisperTokenizerFast.from_pretrained(peft_config.base_model_name_or_path,
-                                                 local_files_only=args.local_files_only)
 processor = WhisperProcessor.from_pretrained(peft_config.base_model_name_or_path,
                                              local_files_only=args.local_files_only)
 
