@@ -17,7 +17,7 @@ from transformers import (
     WhisperProcessor,
 )
 
-from utils.callback import SavePeftModelCallback
+from utils.callback import SavePeftModelCallback, CEREvaluationCallback
 from utils.data_utils import DataCollatorSpeechSeq2SeqWithPadding
 from utils.model_utils import load_from_checkpoint
 from utils.reader import CustomDataset
@@ -74,6 +74,12 @@ add_arg(
 )
 add_arg("hub_model_id", type=str, default=None, help="HuggingFace Hub上的模型仓库ID")
 add_arg("save_total_limit", type=int, default=100, help="只保存最新检查点的数量")
+add_arg(
+    "override_training_args",
+    type=bool,
+    default=True,
+    help="是否覆盖checkpoint中的训练参数",
+)
 args = parser.parse_args()
 print_arguments(args)
 
@@ -224,6 +230,15 @@ def main():
         model.print_trainable_parameters()
         print("=" * 90)
 
+    # 創建 CER 評估 callback
+    cer_callback = CEREvaluationCallback(
+        eval_dataset=test_dataset,
+        processor=processor,
+        eval_loss_threshold=0.3,  # 只有當 eval_loss < 0.3 時才進行 CER 評估
+        remove_pun=True,
+        to_simple=True,
+    )
+
     # 定义训练器
     trainer = Seq2SeqTrainer(
         args=training_args,
@@ -232,7 +247,7 @@ def main():
         eval_dataset=test_dataset,
         data_collator=data_collator,
         processing_class=processor.feature_extractor,
-        callbacks=[SavePeftModelCallback],
+        callbacks=[SavePeftModelCallback, cer_callback],
     )
     model.config.use_cache = False
     trainer._load_from_checkpoint = load_from_checkpoint
