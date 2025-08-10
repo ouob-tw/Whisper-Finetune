@@ -53,7 +53,7 @@ def main():
     model = WhisperForConditionalGeneration.from_pretrained(args.model_path,
                                                             device_map="auto",
                                                             local_files_only=args.local_files_only)
-    model.generation_config.language = args.language.lower()
+    model.generation_config.language = args.language.lower() if args.language else None
     model.generation_config.forced_decoder_ids = None
     model.eval()
 
