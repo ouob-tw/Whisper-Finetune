@@ -262,35 +262,39 @@ def main():
         # 修改checkpoint中的训练参数，然后恢复训练
         print(f"⚠️  修改checkpoint中的训练参数，使用当前设定的参数")
         print(f"📂 修改 {args.resume_from_checkpoint}/training_args.bin")
-        
+
         training_args_path = f"{args.resume_from_checkpoint}/training_args.bin"
         trainer_state_path = f"{args.resume_from_checkpoint}/trainer_state.json"
-        
+
         try:
             # 修改 training_args.bin
             old_args = torch.load(training_args_path, weights_only=False)
             old_args.eval_steps = args.eval_steps
-            old_args.save_steps = args.save_steps  
+            old_args.save_steps = args.save_steps
             old_args.per_device_train_batch_size = args.per_device_train_batch_size
             old_args.per_device_eval_batch_size = args.per_device_eval_batch_size
             old_args.gradient_accumulation_steps = args.gradient_accumulation_steps
             old_args.warmup_steps = args.warmup_steps
             torch.save(old_args, training_args_path)
-            print(f"✅ 已修改 training_args.bin: eval_steps={args.eval_steps}, save_steps={args.save_steps}")
-            
+            print(
+                f"✅ 已修改 training_args.bin: eval_steps={args.eval_steps}, save_steps={args.save_steps}"
+            )
+
             # 修改 trainer_state.json
             if os.path.exists(trainer_state_path):
-                with open(trainer_state_path, 'r') as f:
+                with open(trainer_state_path, "r") as f:
                     trainer_state = json.load(f)
-                trainer_state['eval_steps'] = args.eval_steps
-                trainer_state['save_steps'] = args.save_steps
-                with open(trainer_state_path, 'w') as f:
+                trainer_state["eval_steps"] = args.eval_steps
+                trainer_state["save_steps"] = args.save_steps
+                with open(trainer_state_path, "w") as f:
                     json.dump(trainer_state, f, indent=2)
-                print(f"✅ 已修改 trainer_state.json: eval_steps={args.eval_steps}, save_steps={args.save_steps}")
-            
+                print(
+                    f"✅ 已修改 trainer_state.json: eval_steps={args.eval_steps}, save_steps={args.save_steps}"
+                )
+
         except Exception as e:
             print(f"❌ 修改checkpoint參數失敗: {e}")
-            
+
         trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
     else:
         # 从头开始训练
