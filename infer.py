@@ -32,10 +32,18 @@ torch_dtype = torch.float16 if torch.cuda.is_available() and args.use_gpu else t
 processor = AutoProcessor.from_pretrained(args.model_path)
 
 # 获取模型
-model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    args.model_path, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True,
-    use_flash_attention_2=args.use_flash_attention_2
-)
+model_kwargs = {
+    "torch_dtype": torch_dtype, 
+    "low_cpu_mem_usage": True, 
+    "use_safetensors": True
+}
+if args.use_flash_attention_2:
+    try:
+        model_kwargs["attn_implementation"] = "flash_attention_2"
+    except:
+        print("Flash Attention 2 not supported, using default attention")
+
+model = AutoModelForSpeechSeq2Seq.from_pretrained(args.model_path, **model_kwargs)
 model.generation_config.forced_decoder_ids = None
 if args.use_bettertransformer and not args.use_flash_attention_2:
     model = model.to_bettertransformer()
